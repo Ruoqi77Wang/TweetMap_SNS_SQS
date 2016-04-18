@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Twitter Sentiment</title>
+  <style>
+  html, body, #map-canvas {
+    height: 100%;
+    margin: 0px;
+    padding: 0px
+  }
+  #panel {
+    background: transparent;
+    position: absolute;
+    top: 5px;
+    height: 100%;
+    width: 20%;
+    /*left: 30%;*/
+    /*margin-left: -180px;*/
+    z-index: 5;
+    padding: 5px;
+    font-family: times;
+  }
+  #piechart, #stat {
+    width: 100%;
+  }
+  #piechart {
+    padding-top: 0px;
+    height: 300px;
+  }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <div id="stat">
+      <p>Total: <i id="all">0</i><p>
+      <p>Positive: <i id="pos">0</i></p>
+      <p>Negative: <i id="neg">0</i></p>
+      <p>Neural: <i id="neu">0</i></p>
+    </div>
+    <div id="piechart"></div>
+  </div>
+  <div id="map-canvas"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js" type="text/javascript"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/0.9.16/socket.io.min.js" type="text/javascript"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?libraries=visualization&sensor=true_or_false?key=AIzaSyAuDjoxQgamvdu8TMzot9wT9KFJmSvXPYg" type="text/javascript"></script>
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+  <script type="text/javascript">
+  var map, heatmap;
+  var pointArray, idArray;
+  var nPos = 0, nNeg = 0, nNeu = 0;
+  var dataTable = null;
+  $(function(){
+    // sentiment panel
+    function setSentiment() {
+      $("#all").html(idArray.length);
+      $("#pos").html(nPos);
+      $("#neg").html(nNeg);
+      $("#neu").html(nNeu);
+      if (!!dataTable) {
+        dataTable.setCell(0, 1, nPos);
+        dataTable.setCell(1, 1, nNeg);
+        dataTable.setCell(2, 1, nNeu);
+        dataTable.setCell(3, 1, idArray.length - nPos - nNeg - nNeu);
+        drawChart();
+      }
+    }
+    // init heat map
+    var mapOptions = {
+      zoom: 4,
+      center: new google.maps.LatLng(37.774546, -122.433523),
+      mapTypeId: google.maps.MapTypeId.ROADMAP,
+      scrollwheel: false
+    };
+    map = new google.maps.Map($('#map-canvas')[0], mapOptions);
+    pointArray = new google.maps.MVCArray([]);
+    heatmap = new google.maps.visualization.HeatmapLayer({
+      data: pointArray
+    });
+    heatmap.setMap(map);
+    idArray = []
+    // connect websocket
+    var socket = io.connect('http://' + document.domain + ':' + location.port);
+    socket.on('connect', function() {
+      socket.emit('connect', {data: 'I\'m connected!'});
+    });
+    socket.on('twit', function(msg) {
+      idArray.push(msg.id);
+      pointArray.push(new google.maps.LatLng(msg.latitude, msg.longitude));
+      // console.log(msg);
+      setSentiment();
+    });
+    socket.on('sentiment', function(msg) {
+      // console.log(msg);
+      var tid = $.inArray(msg.id, idArray);
+      if (tid < 0) return;
+      if (msg.sentiment == "negative") {  // 0 - negative, 1 - positive
+        nNeg += 1;
+      } else if (msg.sentiment == "positive") {
+        nPos += 1;
+      } else {
+        nNeu += 1;
+      }
+      setSentiment();
+    });
+  });
+  google.load("visualization", "1", {packages:["corechart"]});
+  google.setOnLoadCallback(initChart);
+  var jPieChart = $('#piechart');
+  // var pt = $("#panel").height()-$("#stat").height()-jPieChart.height();
+  // console.log(pt);
+  // jPieChart.css({paddingTop: pt});
+  var chartOptions = {
+    backgroundColor: 'transparent',
+    width: jPieChart.width(),
+    height: jPieChart.height(),
+    legend : { position: 'bottom'}
+  };
+  var chart = null;
+  function drawChart() {
+    chart.draw(dataTable, chartOptions);
+  }
+  function initChart() {
+    dataTable = google.visualization.arrayToDataTable([
+      ['Sentiment', 'Percentage'],
+      ['Positive',  3],
+      ['Negative',  2],
+      ['Neutral',   11],
+      ['Unkown',    10]
+    ]);
+    chart = new google.visualization.PieChart(jPieChart[0]);
+    drawChart();
+  }
+  </script>
+</body>
+</html>

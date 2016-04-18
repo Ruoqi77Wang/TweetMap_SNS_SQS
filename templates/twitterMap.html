@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Heatmaps</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 100%;
+      }
+      #floating-panel {
+      position: absolute;
+      top: 10px;
+      left: 30%;
+      z-index: 5;
+      background-color: #fff;
+      padding: 5px;
+      border: 1px solid #999;
+      text-align: center;
+      font-family: 'Roboto','sans-serif';
+      line-height: 30px;
+      padding-left: 10px;
+      }
+
+      #floating-panel {
+        background-color: #fff;
+        border: 1px solid #999;
+        left: 50%;
+        padding: 5px;
+        position: absolute;
+        top: 10px;
+        z-index: 5;
+      }
+
+      #keyword-panel{
+      position: absolute;
+      top: 10px;
+      left: 10%;
+      z-index: 5;
+      background-color: #fff;
+      padding: 5px;
+      border: 1px solid #999;
+      text-align: center;
+      font-family: 'Roboto','sans-serif';
+      line-height: 30px;
+      padding-left: 10px;
+      }
+
+      #socket{
+    position: absolute;
+    top: 90px;
+    left: 10%;
+    z-index: 5;
+    background-color: #fff;
+  padding: 5px;
+  border: 1px solid #999;
+  text-align: center;
+  font-family: 'Roboto','sans-serif';
+  line-height: 40px;
+  padding-left: 10px;
+  }
+
+     #displayMesg{
+    position: absolute;
+    top: 200px;
+    left: 10%;
+    z-index: 5;
+    background-color: #fff;
+  padding: 5px;
+  border: 1px solid #999;
+  text-align: center;
+  font-family: 'Roboto','sans-serif';
+  line-height: 40px;
+  padding-left: 10px;
+  }
+
+
+      #panel {
+      background: transparent;
+      position: absolute;
+      top: 10px;
+      height: 100%;
+      width: 20%;
+    /*left: 30%;*/
+    /*margin-left: -180px;*/
+      z-index: 5;
+      padding: 5px;
+      font-family: times;
+      }
+      #piechart, #stat {
+      width: 100%;
+      }
+
+      #piechart {
+     position: absolute;
+      height: 300px;
+      width: 300px;
+      top: 300px;
+      z-index: 5;
+      }
+    </style>
+ <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+ <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+ <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+
+  </head>
+
+  <body>
+  <div id="socket">
+      <p>
+           Connect Socket:<button onclick="connectSocket()">Socket</button>
+      </p >
+    </div>
+    <div id="displayMesg">
+      <p>
+           
+      </p >
+    </div>
+    <div id="keyword-panel">
+      <p>
+           Select a keyword:
+        <select id="selector">
+          <option value="weather">weather</option>
+          <option value="and">and</option>
+          <option value="music">music</option>
+          <option value="good">good</option>
+          <option value="company">company</option>
+        </select>
+        <button onclick="initMap()">Update Now</button>
+      </p>
+    </div>
+    <div id="panel">
+      <div id="stat">
+        <p>Total: <i id="total">0</i><p>
+        <p>Positive: <i id="pos">0</i></p>
+        <p>Negative: <i id="neg">0</i></p>
+        <p>Neural: <i id="neu">0</i></p>
+       </div>
+       <div id="piechart"></div>
+    </div>
+    <div id="floating-panel">
+      <button onclick="toggleHeatmap()">Toggle Heatmap</button>
+      <button onclick="changeGradient()">Change gradient</button>
+      <button onclick="changeRadius()">Change radius</button>
+      <button onclick="changeOpacity()">Change opacity</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+
+// This example requires the Visualization library. Include the libraries=visualization
+// parameter when you first load the API. For example:
+// <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=visualization">
+  var nPos = 0, nNeg = 0, nNeu = 0;
+
+     google.charts.load('current', {'packages':['corechart']});
+     google.charts.setOnLoadCallback(drawChart);
+     function drawChart() {
+      //alert("chart");
+      //alert(nPos);
+     var data = google.visualization.arrayToDataTable([
+             ['Sentiment', 'Percentage'],
+             ['Positive',  nPos],
+             ['Negative',  nNeg],
+             ['Neutral',   nNeu],
+     //        ['Unkown',    10]
+          ]);
+
+       var options = {
+         title: 'My Daily Activities'
+       };
+
+       var chart = new google.visualization.PieChart(document.getElementById('piechart'));
+
+       chart.draw(data, options);
+     }
+
+
+
+
+var map, heatmap;
+var lati=[], logi=[],loc=[];
+//var array=[];
+var pointArray = new google.map.MVCArray([]);
+//var nPos = 0, nNeg = 0, nNeu = 0;
+var dataTable=null;
+var idArray;
+// var socket = io.connect('http://' + document.domain + ':' + location.port);
+//     socket.on('connect', function() {
+//         socket.emit('my event', {data: 'I\'m connected!'});
+//     });
+
+// function setSentiment(){
+//   $("#total").html(idArray.length);
+//       $("#pos").html(nPos);
+//       $("#neg").html(nNeg);
+//       $("#neu").html(nNeu);
+//       if (!!dataTable) {
+//         dataTable.setCell(0, 1, nPos);
+//         dataTable.setCell(1, 1, nNeg);
+//         dataTable.setCell(2, 1, nNeu);
+//         dataTable.setCell(3, 1, idArray.length - nPos - nNeg - nNeu);
+//         drawChart();
+//       }  
+// }
+function connectSocket(){
+  //alert(1);
+  var socket = io.connect('http://0.0.0.0:5000/socket');
+  //alert(2);
+  //socket.emit('connect');
+  //alert(3);
+ //socket.emit('message',{data:'send!!'});
+  //alert(4);
+  var data=[];
+  socket.on('msg', function(msg) {
+      data=[];
+       //alert(5);
+        data.push(msg.data);
+       // alert('here');
+        //alert(data);
+        var targetElement = document.getElementById('displayMesg');
+        targetElement.innerHTML = data;
+        if(data=='negative')
+          nNeg+=1;
+        if(data=='positive')
+          nPos+=1
+        if(data=='neutral')
+          nNeu+=1
+        drawChart();
+        //socket.emit('message', {data: 'I\'m connected!'});
+    });
+ // alert(6);
+  //alert(data);
+  return data;
+}
+
+
+function initMap() {
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: {lat: 40.775, lng: -73.434},
+    zoom: 3,
+    mapTypeId: google.maps.MapTypeId.SATELLITE
+    //mapTypeId: google.maps.MapTypeId.SATELLITE
+  });
+
+
+  heatmap = new google.maps.visualization.HeatmapLayer({
+    data: updateData(),
+    map: map
+  });
+  heatmap.setMap(map);
+  //map.data.loadGeoJson('locations.json');
+  //drawChart();
+}
+
+idArray=[]
+//connect websocket
+//var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+
+
+// google.charts.load('current', {'packages':['corechart']});
+// google.charts.setOnLoadCallback(drawChart);
+// function drawChart() {
+
+//  var data = google.visualization.arrayToDataTable([
+//             ['Sentiment', 'Percentage'],
+//              ['Positive',  nPos],
+//              ['Negative',  nNeg],
+//              ['Neutral',   nNeu],
+//         //     ['Unkown',    10]
+//           ]);
+
+//          var options = {
+//          title: 'My Daily Activities'
+//          };
+
+//          var chart = new google.visualization.PieChart(document.getElementById('piechart'));
+
+//          chart.draw(data, options);
+//        }
+
+function toggleHeatmap() {
+  heatmap.setMap(heatmap.getMap() ? null : map);
+}
+
+function changeGradient() {
+  var gradient = [
+    'rgba(0, 255, 255, 0)',
+    'rgba(0, 255, 255, 1)',
+    'rgba(0, 191, 255, 1)',
+    'rgba(0, 127, 255, 1)',
+    'rgba(0, 63, 255, 1)',
+    'rgba(0, 0, 255, 1)',
+    'rgba(0, 0, 223, 1)',
+    'rgba(0, 0, 191, 1)',
+    'rgba(0, 0, 159, 1)',
+    'rgba(0, 0, 127, 1)',
+    'rgba(63, 0, 91, 1)',
+    'rgba(127, 0, 63, 1)',
+    'rgba(191, 0, 31, 1)',
+    'rgba(255, 0, 0, 1)'
+  ]
+  heatmap.set('gradient', heatmap.get('gradient') ? null : gradient);
+}
+
+function changeRadius() {
+  heatmap.set('radius', heatmap.get('radius') ? null : 20);
+}
+
+function changeOpacity() {
+  heatmap.set('opacity', heatmap.get('opacity') ? null : 0.2);
+}
+
+
+function updateData(){
+  var option=document.getElementById('selector').value
+  //alert(option)
+  var points=[]
+  //alert(0)
+  $.ajax({
+  type: 'POST',
+  url: '/tweets',
+  data: {'keyword':option},
+  dataType: 'json',
+  //data: 'a'
+  async: false,
+  success: function(res){// your code here
+    //alert(1)
+    //console.log(res);
+    //alert(1);
+     var loca=res.data;
+     var leng=loca.length;
+     //alert(leng)
+     //alert(loca[leng-1].latitude)
+     //alert(loca[leng-1].longitude)
+     //alert(loca[0])
+     //alert(loca[0].latitude)
+    for(var i=0;i<leng;i++){
+        //
+        var lat=loca[i].latitude;
+        var log=loca[i].longitude;
+        //alert(log)
+        //var pos=new google.maps.LatLng(lat,log);
+        //alert(lat)
+        points.push(new google.maps.LatLng(lat,log));
+        //alert(points.length)
+        //pointArray=new google.map.MVCArray(points);
+        //heatmap.setData(pointArray);
+        //alert(lat)
+    }
+    
+  },
+  error: function(){
+    alert('error');
+    //return points
+  }
+  
+  });
+//alert(points.length)
+return points;
+
+}
+// function getPoints() {
+//   var flag1=[];
+    
+//     // new google.maps.LatLng(37.782992, -122.442112),
+//     // new google.maps.LatLng(37.783100, -122.441461),
+//     // new google.maps.LatLng(37.783206, -122.440829),
+//     // new google.maps.LatLng(37.783273, -122.440324),
+// flag1.push(new google.maps.LatLng(40.782551, -73.445368));
+// flag1.push(new google.maps.LatLng(40.782551, -73.445368)),
+// flag1.push(new google.maps.LatLng(41.782745, -74.444586)),
+// flag1.push(new google.maps.LatLng(42.782842, -75.443688)),
+// flag1.push(new google.maps.LatLng(44.782919, -76.442815)),
+// alert(flag1[0])
+// alert(flag1)
+// return flag1
+// }
+
+   
+    </script>
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCxx5HZmj8qpCh7eTX-hFgZFtLbec3Sua0&signed_in=true&libraries=visualization&callback=initMap">
+    </script>
+  </body>
+</html>
